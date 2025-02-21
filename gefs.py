@@ -9,6 +9,7 @@ def _():
     import pandas as pd
     import xarray as xr
     import altair as alt
+
     return alt, pd, xr
 
 
@@ -30,7 +31,10 @@ def _(ds, pd):
     _LONDON_LON = -0.12
     temperature = (
         ds.sel(
-            init_time="2025-02-21T00", latitude=_LONDON_LAT, longitude=_LONDON_LON, method="nearest"
+            init_time="2025-02-21T00",
+            latitude=_LONDON_LAT,
+            longitude=_LONDON_LON,
+            method="nearest",
         )["temperature_2m"]
         .to_dataframe()
         .reset_index()[["valid_time", "temperature_2m", "ensemble_member"]]
@@ -54,7 +58,9 @@ def _(alt, temperature):
         alt.Y("temperature_2m").axis(title="°C", titleAngle=0, titleAlign="right"),
         detail="ensemble_member",
         color=alt.value("#707070"),
-    ).properties(width=900, height=400).configure_axis(grid=False).configure_view(stroke=None)
+    ).properties(width=900, height=400).configure_axis(grid=False).configure_view(
+        stroke=None
+    )
     return
 
 
