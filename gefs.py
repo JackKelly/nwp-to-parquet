@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.11.7"
+__generated_with = "0.11.8"
 app = marimo.App(width="medium")
 
 
@@ -9,7 +9,6 @@ def _():
     import pandas as pd
     import xarray as xr
     import altair as alt
-
     return alt, pd, xr
 
 
@@ -61,6 +60,11 @@ def _(alt, temperature):
     ).properties(width=900, height=400).configure_axis(grid=False).configure_view(
         stroke=None
     )
+    return
+
+
+@app.cell
+def _():
     return
 
 
