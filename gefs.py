@@ -24,70 +24,6 @@ def _(mo):
 
 @app.cell
 def _():
-    import pandas as pd
-    import xarray as xr
-    import altair as alt
-    return alt, pd, xr
-
-
-@app.cell
-def _(xr):
-    ds = xr.open_zarr(
-        "https://data.dynamical.org/noaa/gefs/forecast/latest.zarr?email=jack@openclimatefix.org",
-        decode_timedelta=True,
-        chunks=None,  # `chunks=None` disables Dask.
-    )
-    ds
-    return (ds,)
-
-
-@app.cell
-def _(ds):
-    ds["temperature_2m"].chunks
-    return
-
-
-@app.cell
-def _(ds, pd):
-    """Select temperature data for London."""
-
-    _LONDON_LAT = 51.51
-    _LONDON_LON = -0.12
-    temperature = (
-        ds.sel(
-            init_time="2025-02-21T00",
-            latitude=_LONDON_LAT,
-            longitude=_LONDON_LON,
-            method="nearest",
-        )["temperature_2m"]
-        .to_dataframe()
-        .reset_index()[["valid_time", "temperature_2m", "ensemble_member"]]
-    )
-
-    # Crop off the last few days of the forecast, because they're NaNs.
-    _start_date = temperature["valid_time"].min()
-    _end_date = _start_date + pd.Timedelta(days=22.5)
-    temperature = temperature[temperature["valid_time"] <= _end_date]
-    return (temperature,)
-
-
-@app.cell
-def _(alt, temperature):
-    """Plot temperature data in an Altair Chart."""
-
-    alt.Chart(temperature, title="GEFS Temperature Forecasts for London").mark_line(
-        interpolate="monotone", opacity=0.3
-    ).encode(
-        alt.X("valid_time").axis(title="Date", format="%d %b"),
-        alt.Y("temperature_2m").axis(title="°C", titleAngle=0, titleAlign="right"),
-        detail="ensemble_member",
-        color=alt.value("#707070"),
-    ).properties(width=900, height=400).configure_axis(grid=False).configure_view(stroke=None)
-    return
-
-
-@app.cell
-def _():
     NWP_VARIABLES = [
         "downward_long_wave_radiation_flux_surface",
         "downward_short_wave_radiation_flux_surface",
@@ -106,36 +42,41 @@ def _():
 
 @app.cell
 def _():
-    import zarr
-    return (zarr,)
+    import pandas as pd
+    import xarray as xr
+    import altair as alt
+    return alt, pd, xr
 
 
 @app.cell
-async def _(zarr):
-    z = await zarr.api.asynchronous.open(
-        store="https://data.dynamical.org/noaa/gefs/forecast/latest.zarr?email=jack@openclimatefix.org",
-        mode="r",
+def _(xr):
+    ds = xr.open_zarr(
+        "https://data.dynamical.org/noaa/gefs/forecast/latest.zarr?email=jack@openclimatefix.org",
+        decode_timedelta=True,
+        # chunks=None,  # `chunks=None` disables Dask.
     )
-    z
-    return (z,)
+    ds
+    return (ds,)
 
 
 @app.cell
-async def _(z):
-    [a async for a in z.array_keys()]
-    return
+def _(ds):
+    """Select temperature data for GB."""
+
+    _GB_LAT = slice(60, 49)
+    _GB_LON = slice(-7, 2)
+    temperature = ds["temperature_2m"].sel(
+        init_time="2025-02-21T00",
+        latitude=_GB_LAT,
+        longitude=_GB_LON,
+        # method="nearest",
+    )
+    return (temperature,)
 
 
 @app.cell
-async def _(z):
-    array = await z.get("temperature_2m")
-    array
-    return (array,)
-
-
-@app.cell
-def _(array):
-    array.chunks
+def _(temperature):
+    temperature.isel(ensemble_member=0, lead_time=0).plot()
     return
 
 
