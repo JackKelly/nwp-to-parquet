@@ -12,11 +12,9 @@ def _(mo):
 
         Relatively simple approach:
 
-        1. Create a list of Zarr `chunks_to_load`. Probably do a month of NWP init times per batch. These chunks don't _have_ to perfectly align with the Zarr chunks. For example, for each task, load a geospatial rectangle around GB, without worrying whether that loads more than 1 Zarr chunk. But, for the other dimesnions, load a single chunk's worth (i.e. 1 `init_time`, all ens members, and all lead_times).
-        2. `xarray` doesn't have an `async` API*. So use `ThreadPoolExecutor` (as per [the example](https://docs.python.org/3/library/concurrent.futures.html#threadpoolexecutor-example)) to load these chunks concurrently.
-        3. `vstack` the data to the Polars dataframe in the main thread.
-
-        \* alternatively, use Zarr-Python's `async` API to read chunks concurrently. But that is probably only worthwhile if we have to have hundreds of `GET` requests in flight in parallel; or if `xarray` complains about being called from multiple threads.
+        1. For each NWP variable: Use `dask` to load a month of data for one NWP variable, a geospatial rectangle around GB, all ens members, and all lead_times. Do any transforms necessary (e.g. get average for each GSP region; reduce to 8bit int)
+        2. Save that month to parquet.
+        3. Repeat for the next month!
         """
     )
     return
@@ -45,7 +43,8 @@ def _():
     import pandas as pd
     import xarray as xr
     import altair as alt
-    return alt, pd, xr
+    import numpy as np
+    return alt, np, pd, xr
 
 
 @app.cell
@@ -65,18 +64,47 @@ def _(ds):
 
     _GB_LAT = slice(60, 49)
     _GB_LON = slice(-7, 2)
-    temperature = ds["temperature_2m"].sel(
-        init_time="2025-02-21T00",
-        latitude=_GB_LAT,
-        longitude=_GB_LON,
-        # method="nearest",
+    temperature = (
+        ds["temperature_2m"]
+        .sel(
+            init_time=slice("2025-02-01T00", "2025-02-21T00"),
+            latitude=_GB_LAT,
+            longitude=_GB_LON,
+            # method="nearest",
+        )
+        .load()
     )
     return (temperature,)
 
 
 @app.cell
 def _(temperature):
-    temperature.isel(ensemble_member=0, lead_time=0).plot()
+    temperature.nbytes / 1e6
+    return
+
+
+@app.cell
+def _(np, temperature):
+    TEMPERATURE_MIN_C = -64
+    TEMPERATURE_MAX_C = 63
+    temperature_range_C = TEMPERATURE_MAX_C - TEMPERATURE_MIN_C
+    # TODO: Remove the fillna. Instead use Polar's ability to mark missing values.
+    temperature_255 = temperature.clip(TEMPERATURE_MIN_C, TEMPERATURE_MAX_C).fillna(TEMPERATURE_MIN_C)
+    temperature_255 = (((temperature_255 - TEMPERATURE_MIN_C) / temperature_range_C) * 255).astype(
+        np.uint8
+    )
+    temperature_255.nbytes / 1e6
+    return (
+        TEMPERATURE_MAX_C,
+        TEMPERATURE_MIN_C,
+        temperature_255,
+        temperature_range_C,
+    )
+
+
+@app.cell
+def _(temperature):
+    temperature.isel(ensemble_member=0, lead_time=0)
     return
 
 
