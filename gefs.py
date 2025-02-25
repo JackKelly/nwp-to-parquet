@@ -5,6 +5,12 @@ app = marimo.App(width="medium")
 
 
 @app.cell(hide_code=True)
+def _():
+    import marimo as mo
+    return (mo,)
+
+
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(
         r"""
@@ -59,59 +65,68 @@ def _(xr):
 
 
 @app.cell
-def _(ds):
+def _(ds, np):
     """Select temperature data for GB."""
 
     _GB_LAT = slice(60, 49)
     _GB_LON = slice(-7, 2)
+
+    TEMPERATURE_MIN_C = -30
+    TEMPERATURE_MAX_C = 50
+    temperature_range_C = TEMPERATURE_MAX_C - TEMPERATURE_MIN_C
+
     temperature = (
-        ds["temperature_2m"]
-        .sel(
-            init_time=slice("2025-02-01T00", "2025-02-21T00"),
-            latitude=_GB_LAT,
-            longitude=_GB_LON,
-            # method="nearest",
+        (
+            (
+                ds["temperature_2m"]
+                .sel(
+                    init_time=slice("2025-02-01T00", "2025-02-03T00"),
+                    latitude=_GB_LAT,
+                    longitude=_GB_LON,
+                    # method="nearest",
+                )
+                .coarsen(latitude=2, longitude=2, boundary="trim")
+                .mean()
+                .clip(TEMPERATURE_MIN_C, TEMPERATURE_MAX_C)
+                # TODO: Remove the fillna. Instead use Polar's ability to mark missing values.
+                .fillna(TEMPERATURE_MIN_C)
+                - TEMPERATURE_MIN_C
+            )
+            / (temperature_range_C / 255)
         )
+        .round()
+        .astype(np.uint8)
         .load()
     )
-    return (temperature,)
 
-
-@app.cell
-def _(temperature):
-    temperature.nbytes / 1e6
-    return
-
-
-@app.cell
-def _(np, temperature):
-    TEMPERATURE_MIN_C = -64
-    TEMPERATURE_MAX_C = 63
-    temperature_range_C = TEMPERATURE_MAX_C - TEMPERATURE_MIN_C
-    # TODO: Remove the fillna. Instead use Polar's ability to mark missing values.
-    temperature_255 = temperature.clip(TEMPERATURE_MIN_C, TEMPERATURE_MAX_C).fillna(TEMPERATURE_MIN_C)
-    temperature_255 = (((temperature_255 - TEMPERATURE_MIN_C) / temperature_range_C) * 255).astype(
-        np.uint8
-    )
-    temperature_255.nbytes / 1e6
+    print("   Number of pixels: {:4d}".format(len(temperature.latitude) * len(temperature.longitude)))
+    print("Number of megabytes: {:6.1f} MB".format(temperature.nbytes / 1e6))
     return (
         TEMPERATURE_MAX_C,
         TEMPERATURE_MIN_C,
-        temperature_255,
+        temperature,
         temperature_range_C,
     )
 
 
 @app.cell
 def _(temperature):
-    temperature.isel(ensemble_member=0, lead_time=0)
+    temperature.sel(init_time="2025-02-01T00").isel(ensemble_member=0, lead_time=0).plot()
     return
 
 
 @app.cell
-def _():
-    import marimo as mo
-    return (mo,)
+def _(mo):
+    mo.md(
+        r"""
+        Next steps:
+
+        1. Save as Zarr v3 (with sharding?)
+        2. Save as Parquet
+        3. Compare size & read speed
+        """
+    )
+    return
 
 
 if __name__ == "__main__":
